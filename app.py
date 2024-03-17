@@ -4,6 +4,8 @@ from tensorflow.keras.optimizers import Adam
 import numpy as np
 from tensorflow.keras.preprocessing import image
 from sklearn.metrics.pairwise import cosine_similarity
+import os
+import uuid  # Module for generating unique IDs
 import requests
 
 # Define input shape for the images
@@ -17,11 +19,12 @@ siamese_model.compile(optimizer=Adam(learning_rate=0.0001), loss='binary_crossen
 
 app = Flask(__name__)
 
-def process_uploaded_image(uploaded_image, product_mapping):
+def process_uploaded_image(image_id, product_mapping):
     """Process the uploaded image to find similar images."""
     similar_product_info = []
 
-    img = image.load_img(uploaded_image, target_size=input_shape[:2])
+    img_path = f"uploads/{image_id}.jpg"
+    img = image.load_img(img_path, target_size=input_shape[:2])
     img = image.img_to_array(img)
     img = np.expand_dims(img, axis=0)
     img = img / 255.0
@@ -66,8 +69,15 @@ def home():
 def compare_images():
     """Compare the uploaded image with product images."""
     uploaded_image = request.files['image']
+    
+    # Generate a unique ID for the uploaded image
+    image_id = str(uuid.uuid4())
+    # Save the uploaded image with the generated ID as the filename
+    uploaded_image.save(os.path.join("uploads", f"{image_id}.jpg"))
+    
     product_mapping = fetch_product_mapping()
-    similar_product_info = process_uploaded_image(uploaded_image, product_mapping)
+    similar_product_info = process_uploaded_image(image_id, product_mapping)
+    
     return jsonify(similar_product_info)
 
 @app.route('/api/compare_images', methods=['POST'])
