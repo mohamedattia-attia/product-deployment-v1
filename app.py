@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from data_preparation import create_siamese_network
 from tensorflow.keras.optimizers import Adam
 import numpy as np
@@ -59,13 +59,13 @@ def fetch_product_mapping():
 
 @app.route('/')
 def home():
-    """Simple route handler for the root URL."""
-    return 'Welcome to the product similarity comparison API!'
+    """Render the index.html template."""
+    return render_template("index.html")
 
 @app.route('/compare_images', methods=['POST'])
 def compare_images():
     """Compare the uploaded image with product images."""
-    uploaded_image = request.files['uploaded_image']
+    uploaded_image = request.files['image']
     product_mapping = fetch_product_mapping()
     similar_product_info = process_uploaded_image(uploaded_image, product_mapping)
     return jsonify(similar_product_info)

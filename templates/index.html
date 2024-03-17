@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Similarity Comparison</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        #upload-form {
+            text-align: center;
+            margin-top: 20px;
+        }
+        #upload-btn {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #upload-btn:hover {
+            background-color: #0056b3;
+        }
+        #result-container {
+            margin-top: 30px;
+        }
+        .product-info {
+            display: flex;
+            align-items: center;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .product-info img {
+            max-width: 100px;
+            margin-right: 20px;
+            border-radius: 4px;
+        }
+        .product-info h3 {
+            margin: 0;
+            color: #333;
+        }
+        #selected-image {
+            display: block;
+            margin: 20px auto;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Product Similarity Comparison</h1>
+        <form id="upload-form" enctype="multipart/form-data">
+            <input type="file" id="upload-input" accept="image/*" required>
+            <button type="submit" id="upload-btn">Upload Image</button>
+        </form>
+        <img id="selected-image" src="#" alt="Selected Image">
+        <div id="result-container"></div>
+    </div>
+
+    <script>
+        const form = document.getElementById('upload-form');
+        const selectedImage = document.getElementById('selected-image');
+        const resultContainer = document.getElementById('result-container');
+
+        form.addEventListener('submit', async function(event) {
+            event.preventDefault();
+            resultContainer.innerHTML = ''; // Clear previous results
+
+            const formData = new FormData();
+            formData.append('uploaded_image', document.getElementById('upload-input').files[0]);
+
+            try {
+                const response = await fetch('/compare_images', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                showResults(data);
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        document.getElementById('upload-input').addEventListener('change', function() {
+            const file = this.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    selectedImage.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            } else {
+                selectedImage.src = '#';
+            }
+        });
+
+        function showResults(data) {
+            if (data.length === 0) {
+                resultContainer.innerHTML = '<p>No similar products found.</p>';
+                return;
+            }
+
+            data.forEach(product => {
+                const productInfo = document.createElement('div');
+                productInfo.classList.add('product-info');
+
+                const productImage = document.createElement('img');
+                productImage.src = product.product_image;
+                productImage.alt = 'Product Image';
+
+                const productName = document.createElement('h3');
+                productName.textContent = `Product ID: ${product.product_id}`;
+
+                productInfo.appendChild(productImage);
+                productInfo.appendChild(productName);
+                resultContainer.appendChild(productInfo);
+            });
+        }
+    </script>
+</body>
+</html>
