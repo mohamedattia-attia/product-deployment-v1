@@ -49,7 +49,7 @@ def get_embedding(image_path):
 
 def fetch_product_mapping():
     """Fetch product image mappings dynamically from the backend."""
-    backend_api_url = 'http://backend.example.com/api/product_mapping'
+    backend_api_url = 'https://al7rm.com/admin-panel/public/api/product_mapping'
     try:
         response = requests.get(backend_api_url)
         data = response.json()
@@ -98,4 +98,4 @@ def compare_images_api():
     return jsonify(similar_product_info)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False, host='0.0.0.0')
