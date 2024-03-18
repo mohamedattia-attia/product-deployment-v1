@@ -1,12 +1,16 @@
-from flask import Flask, request, jsonify, render_template
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
+from typing import List, Dict
 from data_preparation import create_siamese_network
 from tensorflow.keras.optimizers import Adam
 import numpy as np
+from PIL import Image  # Import Image module from PIL
 from tensorflow.keras.preprocessing import image
 from sklearn.metrics.pairwise import cosine_similarity
 import os
 import uuid  # Module for generating unique IDs
-import requests
+import json
 
 # Define input shape for the images
 input_shape = (224, 224, 3)
@@ -17,85 +21,65 @@ siamese_model = create_siamese_network(input_shape)
 # Compile the model
 siamese_model.compile(optimizer=Adam(learning_rate=0.0001), loss='binary_crossentropy', metrics=['accuracy'])
 
-app = Flask(__name__)
+app = FastAPI()
 
-def process_uploaded_image(image_id, product_mapping):
+# Define the templates directory
+templates = Jinja2Templates(directory="templates")
+
+product_mapping = {}  # Global variable to store the product mapping
+
+def load_product_mapping():
+    """Load product mapping from data.json."""
+    global product_mapping
+    try:
+        with open("data.json", "r") as file:
+            product_mapping = json.load(file)
+    except Exception as e:
+        print(f"Error loading product mapping: {e}")
+
+load_product_mapping()
+
+def process_uploaded_image(image_id: str, uploaded_image_path: str) -> List[Dict[str, str]]:
     """Process the uploaded image to find similar images."""
     similar_product_info = []
 
-    img_path = f"uploads/{image_id}.jpg"
-    img = image.load_img(img_path, target_size=input_shape[:2])
-    img = image.img_to_array(img)
-    img = np.expand_dims(img, axis=0)
-    img = img / 255.0
+    # Preprocess uploaded image
+    img = Image.open(uploaded_image_path)
+    img = img.resize((input_shape[0], input_shape[1]))
+    img_array = np.array(img) / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
 
-    embedding = siamese_model.predict([img, img])
+    embedding = siamese_model.predict([img_array, img_array])
 
-    for product_image, product_id in product_mapping.items():
-        product_embedding = get_embedding(product_image)  # Get embedding of product image
+    for product_id, product_image in product_mapping.items():
+        # Preprocess product image
+        product_img = Image.open(product_image)
+        product_img = product_img.resize((input_shape[0], input_shape[1]))
+        product_img_array = np.array(product_img) / 255.0
+        product_img_array = np.expand_dims(product_img_array, axis=0)
+        
+        product_embedding = siamese_model.predict([product_img_array, product_img_array])
+        
         similarity = cosine_similarity(embedding, product_embedding)
         if similarity > 0.8:  # Adjust similarity threshold as needed
             similar_product_info.append({"product_image": product_image, "product_id": product_id})
 
     return similar_product_info
 
-def get_embedding(image_path):
-    """Get the embedding of an image."""
-    img = image.load_img(image_path, target_size=input_shape[:2])
-    img = image.img_to_array(img)
-    img = np.expand_dims(img, axis=0)
-    img = img / 255.0
-    return siamese_model.predict([img, img])
-
-def fetch_product_mapping():
-    """Fetch product image mappings dynamically from the backend."""
-    backend_api_url = 'https://al7rm.com/admin-panel/public/api/product_mapping'
-    try:
-        response = requests.get(backend_api_url)
-        data = response.json()
-        # Process the received data as needed
-        # For example, extract image filenames and their corresponding IDs
-        return data.get('product_mapping', {})
-    except Exception as e:
-        print(f"Error fetching product mapping: {e}")
-        return {}
-
-@app.route('/')
-def home():
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
     """Render the index.html template."""
-    return render_template("index.html")
+    return templates.TemplateResponse("index.html", {"request": request})
 
-@app.route('/compare_images', methods=['POST'])
-def compare_images():
+@app.post('/compare_images')
+async def compare_images(image: UploadFile = File(...)):
     """Compare the uploaded image with product images."""
-    uploaded_image = request.files['image']
-    
-    # Generate a unique ID for the uploaded image
     image_id = str(uuid.uuid4())
-    # Save the uploaded image with the generated ID as the filename
-    uploaded_image.save(os.path.join("uploads", f"{image_id}.jpg"))
-    
-    product_mapping = fetch_product_mapping()
-    similar_product_info = process_uploaded_image(image_id, product_mapping)
-    
-    return jsonify(similar_product_info)
+    with open(f"uploads/{image_id}.jpg", "wb") as buffer:
+        buffer.write(await image.read())
 
-@app.route('/api/compare_images', methods=['POST'])
-def compare_images_api():
-    """API endpoint for comparing images."""
-    data = request.get_json(force=True)
-    uploaded_image_path = data.get('image_path')
-    uploaded_image_embedding = get_embedding(uploaded_image_path)
-    product_mapping = fetch_product_mapping()
-    
-    similar_product_info = []
-    for product_image, product_id in product_mapping.items():
-        product_embedding = get_embedding(product_image)
-        similarity = cosine_similarity(uploaded_image_embedding, product_embedding)
-        if similarity > 0.8:  # Adjust similarity threshold as needed
-            similar_product_info.append({"product_image": product_image, "product_id": product_id})
+    print("Uploaded image saved successfully:", f"uploads/{image_id}.jpg")
 
-    return jsonify(similar_product_info)
+    similar_product_info = process_uploaded_image(image_id, f"uploads/{image_id}.jpg")
 
-if __name__ == '__main__':
-    app.run(debug=False, host='0.0.0.0')
+    return similar_product_info
